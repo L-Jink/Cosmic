@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Test;
 import tools.PacketCreator;
 
 import java.awt.Point;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -179,5 +182,34 @@ class HiredMerchantTest {
         assertTrue(HiredMerchant.canHoldMerchantMesos(Integer.MAX_VALUE - 10, 10));
         assertFalse(HiredMerchant.canHoldMerchantMesos(Integer.MAX_VALUE - 10, 11));
         assertFalse(HiredMerchant.canHoldMerchantMesos(Integer.MAX_VALUE, 1));
+    }
+
+    @Test
+    void offlineCreditIsASingleAtomicConditionalUpdate() throws Exception {
+        Connection con = mock(Connection.class);
+        PreparedStatement ps = mock(PreparedStatement.class);
+        when(con.prepareStatement(any(String.class))).thenReturn(ps);
+        when(ps.executeUpdate()).thenReturn(1);
+
+        assertTrue(HiredMerchant.tryAddOfflineMerchantMesos(con, 42, 1000));
+
+        org.mockito.ArgumentCaptor<String> sql = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(con, times(1)).prepareStatement(sql.capture());
+        assertTrue(sql.getValue().contains("MerchantMesos = MerchantMesos + ?"));   // no SELECT-then-UPDATE
+        assertTrue(sql.getValue().contains("MerchantMesos <= ?"));
+        verify(ps).setInt(1, 1000);
+        verify(ps).setInt(2, 42);
+        verify(ps).setInt(3, Integer.MAX_VALUE - 1000);   // overflow guard evaluated inside the same statement
+    }
+
+    @Test
+    void offlineCreditIsRefusedWhenItWouldOverflow() throws Exception {
+        Connection con = mock(Connection.class);
+        PreparedStatement ps = mock(PreparedStatement.class);
+        when(con.prepareStatement(any(String.class))).thenReturn(ps);
+        when(ps.executeUpdate()).thenReturn(0);   // WHERE guard matched no row
+
+        assertFalse(HiredMerchant.tryAddOfflineMerchantMesos(con, 42, 10));
+        assertFalse(HiredMerchant.tryAddOfflineMerchantMesos(con, 42, -1));
     }
 }

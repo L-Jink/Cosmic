@@ -5321,6 +5321,22 @@ public class Character extends AbstractCharacterObject {
     }
 
     public int getMerchantNetMeso() {
+        int elapsedDays = getFredrickElapsedDays();
+
+        long netMeso = merchantmeso; // negative mesos issues found thanks to Flash, Vcoc
+        netMeso = (netMeso * (100 - elapsedDays)) / 100;
+        return (int) netMeso;
+    }
+
+    /**
+     * Gross merchant mesos that must be consumed to hand out {@code net} mesos after the Fredrick fee.
+     */
+    static long grossForNetMerchantMeso(long net, int elapsedDays) {
+        int keep = 100 - elapsedDays;
+        return keep <= 0 ? Long.MAX_VALUE : (net * 100 + keep - 1) / keep;
+    }
+
+    private int getFredrickElapsedDays() {
         int elapsedDays = 0;
 
         try (Connection con = DatabaseConnection.getConnection();
@@ -5340,9 +5356,7 @@ public class Character extends AbstractCharacterObject {
             elapsedDays = 100;
         }
 
-        long netMeso = merchantmeso; // negative mesos issues found thanks to Flash, Vcoc
-        netMeso = (netMeso * (100 - elapsedDays)) / 100;
-        return (int) netMeso;
+        return elapsedDays;
     }
 
     public int getMesosTraded() {
@@ -8852,6 +8866,7 @@ public class Character extends AbstractCharacterObject {
     }
 
     public synchronized void withdrawMerchantMesos() {
+        final int elapsedDays = getFredrickElapsedDays();
         int merchantMeso = this.getMerchantNetMeso();
         int playerMeso = this.getMeso();
 
@@ -8861,7 +8876,10 @@ public class Character extends AbstractCharacterObject {
             if (possible > 0) {
                 if (possible < merchantMeso) {
                     this.gainMeso(possible, false);
-                    this.setMerchantMeso(merchantMeso - possible);
+                    // the stored amount is gross (fee applies at withdrawal): deduct the gross share of what was paid out,
+                    // not the net remainder, which would bake the fee into the balance and charge it again next time
+                    long grossPaid = Math.min(this.merchantmeso, grossForNetMerchantMeso(possible, elapsedDays));
+                    this.setMerchantMeso((int) (this.merchantmeso - grossPaid));
                 } else {
                     this.gainMeso(merchantMeso, false);
                     this.setMerchantMeso(0);

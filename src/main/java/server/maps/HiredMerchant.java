@@ -300,6 +300,34 @@ public class HiredMerchant extends AbstractMapObject {
         return (long) current + add <= Integer.MAX_VALUE;
     }
 
+    /**
+     * Atomically credits an OFFLINE owner's pending merchant mesos in one statement (no read-modify-write),
+     * so concurrent sales from different channels cannot lose an update. The credit is refused (false) instead of
+     * being clamped when it would overflow, so the buyer's mesos are never silently discarded.
+     */
+    static boolean tryAddOfflineMerchantMesos(Connection con, int ownerId, int add) throws SQLException {
+        if (add < 0) {
+            return false;
+        }
+        try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET MerchantMesos = MerchantMesos + ? WHERE id = ? AND MerchantMesos <= ?")) {
+            ps.setInt(1, add);
+            ps.setInt(2, ownerId);
+            ps.setInt(3, Integer.MAX_VALUE - add);
+            return ps.executeUpdate() == 1;
+        }
+    }
+
+    /**
+     * Undoes a successful {@link #tryAddOfflineMerchantMesos} when the sale did not complete.
+     */
+    static void revertOfflineMerchantMesos(Connection con, int ownerId, int add) throws SQLException {
+        try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET MerchantMesos = MerchantMesos - ? WHERE id = ?")) {
+            ps.setInt(1, add);
+            ps.setInt(2, ownerId);
+            ps.executeUpdate();
+        }
+    }
+
     public void buy(Client c, int item, short quantity) {
         synchronized (items) {
             // Closed (or being closed) shops must not sell: closeShop() returns the remaining stock to the owner.
@@ -330,11 +358,27 @@ public class HiredMerchant extends AbstractMapObject {
 
             int price = (int) total;
             if (c.getPlayer().getMeso() >= price) {
+                final int ownerShare = price - Trade.getFee(price);
                 Character onlineOwner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterByName(ownerName);
-                if (onlineOwner != null && !canHoldMerchantMesos(onlineOwner.getMerchantMeso(), price - Trade.getFee(price))) {
-                    c.getPlayer().dropMessage(1, "Transaction failed since the shop owner can't hold any more mesos.");
-                    c.sendPacket(PacketCreator.enableActions());
-                    return;
+                boolean reservedOffline = false;
+                if (onlineOwner != null) {
+                    if (!canHoldMerchantMesos(onlineOwner.getMerchantMeso(), ownerShare)) {
+                        c.getPlayer().dropMessage(1, "Transaction failed since the shop owner can't hold any more mesos.");
+                        c.sendPacket(PacketCreator.enableActions());
+                        return;
+                    }
+                } else {
+                    // offline owner: reserve the credit atomically in the DB before taking anything from the buyer
+                    try (Connection con = DatabaseConnection.getConnection()) {
+                        reservedOffline = tryAddOfflineMerchantMesos(con, ownerId, ownerShare);
+                    } catch (SQLException e) {
+                        e.printStackTrace();
+                    }
+                    if (!reservedOffline) {
+                        c.getPlayer().dropMessage(1, "Transaction failed since the shop owner can't hold any more mesos.");
+                        c.sendPacket(PacketCreator.enableActions());
+                        return;
+                    }
                 }
 
                 if (canBuy(c, newItem)) {
@@ -354,32 +398,17 @@ public class HiredMerchant extends AbstractMapObject {
                         announceItemSold(newItem, price, getQuantityLeft(pItem.getItem().getItemId()));
                     }
 
-                    Character owner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterByName(ownerName);
-                    if (owner != null) {
-                        owner.addMerchantMesos(price);
-                    } else {
+                    if (onlineOwner != null) {
+                        onlineOwner.addMerchantMesos(price);
+                    }
+                } else {
+                    if (reservedOffline) {
                         try (Connection con = DatabaseConnection.getConnection()) {
-                            long merchantMesos = 0;
-                            try (PreparedStatement ps = con.prepareStatement("SELECT MerchantMesos FROM characters WHERE id = ?")) {
-                                ps.setInt(1, ownerId);
-                                try (ResultSet rs = ps.executeQuery()) {
-                                    if (rs.next()) {
-                                        merchantMesos = rs.getInt(1);
-                                    }
-                                }
-                            }
-                            merchantMesos += price;
-
-                            try (PreparedStatement ps = con.prepareStatement("UPDATE characters SET MerchantMesos = ? WHERE id = ?", PreparedStatement.RETURN_GENERATED_KEYS)) {
-                                ps.setInt(1, (int) Math.min(merchantMesos, Integer.MAX_VALUE));
-                                ps.setInt(2, ownerId);
-                                ps.executeUpdate();
-                            }
-                        } catch (Exception e) {
+                            revertOfflineMerchantMesos(con, ownerId, ownerShare);
+                        } catch (SQLException e) {
                             e.printStackTrace();
                         }
                     }
-                } else {
                     c.getPlayer().dropMessage(1, "Your inventory is full. Please clear a slot before buying this item.");
                     c.sendPacket(PacketCreator.enableActions());
                     return;
