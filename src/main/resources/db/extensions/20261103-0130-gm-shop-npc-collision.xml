@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        The GM shop (shopid 1337, opened by the !gmshop command) was attached to npcid 11000, which is also Sid's
+        real shop (shopid 11000, Maple Island). Once a GM ran !gmshop, ShopFactory cached the GM shop as the shop of
+        NPC 11000 and Sid started selling GM items for 1 meso. !gmshop looks the shop up by shopid, so the npcid
+        link is not needed.
+    -->
+    <changeSet id="20261103-0130-gm-shop-npc-collision" author="cosmic-content">
+        <sql>UPDATE shops SET npcid = 0 WHERE shopid = 1337 AND npcid = 11000;</sql>
+    </changeSet>
+
+</databaseChangeLog>
