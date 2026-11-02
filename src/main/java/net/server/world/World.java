@@ -1956,10 +1956,19 @@ public class World {
             }
         }
 
-        hmsAvailable.sort((p1, p2) -> p1.getLeft().getPrice() - p2.getLeft().getPrice());
+        return sortAndTruncateOwlResults(hmsAvailable);
+    }
 
-        hmsAvailable.subList(0, Math.min(hmsAvailable.size(), 200));    //truncates the list to have up to 200 elements
-        return hmsAvailable;
+    public static final int OWL_MAX_RESULTS = 200;
+
+    /**
+     * Orders owl search results by ascending price and caps them at {@link #OWL_MAX_RESULTS}.
+     * Uses Integer.compare (price subtraction overflows for prices near Integer.MAX_VALUE).
+     */
+    public static List<Pair<PlayerShopItem, AbstractMapObject>> sortAndTruncateOwlResults(List<Pair<PlayerShopItem, AbstractMapObject>> results) {
+        List<Pair<PlayerShopItem, AbstractMapObject>> sorted = new ArrayList<>(results);
+        sorted.sort((p1, p2) -> Integer.compare(p1.getLeft().getPrice(), p2.getLeft().getPrice()));
+        return new ArrayList<>(sorted.subList(0, Math.min(sorted.size(), OWL_MAX_RESULTS)));
     }
 
     private void pushRelationshipCouple(Pair<Integer, Pair<Integer, Integer>> couple) {
