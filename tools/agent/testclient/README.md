@@ -62,12 +62,53 @@ close the socket (clean logout), and no `Error in packet handler`.
 - `HeadlessClient` = one encrypted connection (`send`, `read`, `expect(SendOpcode)`). `PacketWriter`/`PacketReader` =
   little-endian field helpers. `Scenario` = one method `run(ScenarioContext)` returning a one-line summary and
   throwing on failure. `Scenarios` = the name -> scenario registry.
-- To add one: create `FooScenario implements Scenario` in `src/test/java/testclient/`, register it in `Scenarios`
-  (`ALL.put("foo", new FooScenario())`). Reuse the login part rather than copying it: extract the first half of
-  `LoginEnterMapScenario` into a helper that returns the connected `HeadlessClient` on the channel (part 2 of this epic
-  will do that for walking/chat).
+- To add one: create a `Scenario` (see `ActionScenarios`), register it in `Scenarios`
+  (`ALL.put("foo", new FooScenario())`). Reuse the login part: `GameSession.enterMap(ctx, account, password,
+  newCharName)` does login -> char list/create -> select -> channel -> `SET_FIELD` and returns a session whose
+  `client` is the connected `HeadlessClient` (close it = logout). In-map packets live in `Actions` (see "Adding an
+  action" below).
 - Use `ScenarioContext.check(cond, msg)` for assertions and `ctx.log` for output; no `Thread.sleep` - wait on a packet
   with `expect`.
 - Server-side assertions go in `run_testclient.ps1` (grep the log); add a `-Scenario`-specific block next to the
   `login-enter-map` one.
 - Use packet constants from `net.opcodes.*` so a renumbering breaks compilation, not silently.
+
+## Scenarios: chat, move, change-map (part 2)
+
+| Scenario | What it does | Asserts |
+|---|---|---|
+| `chat` | two fresh characters (A, B) in Mushroom Town; A sends `GENERAL_CHAT` | B (and A itself) receive `CHATTEXT` from A with the same text; server log has `Received packet id 49` |
+| `move` | A sends `MOVE_PLAYER` (absolute move to 123,456) | B receives `MOVE_PLAYER` for A with x=123 y=456 (the server never echoes it to the mover) |
+| `change-map` | one fresh character walks next to portal `out00` (1077,480) and sends `CHANGE_MAP` | reply `SET_FIELD` names map 20000; server log has `Received packet id 38` |
+
+Run: `tools/agent/run_testclient.ps1 -Scenario chat` (or `move`, `change-map`). These scenarios ignore `--user/--pass`:
+each run registers throwaway accounts `qa<6 hex>a` / `qa<6 hex>b` (password `qa`) with characters `Qa<6 hex>A` /
+`Qa<6 hex>B`, because a map change cannot be undone through portals and a reused character would drift away from the
+start map. Cost: a few small rows per run in the dev DB (clean up with `DELETE FROM characters WHERE name LIKE 'Qa%'`
+and the `qa%` accounts if it ever matters). `MOVE_PLAYER` is on the server's ignored-recv-packet list
+(`LoggingUtil.isIgnoredRecvPacket`), so it never shows in the log; the reply packet is the assertion.
+
+Gotchas found while writing them:
+- The client must send an **empty `PLAYER_MAP_TRANSFER` (0xCF)** after every `SET_FIELD` (login and map change).
+  Without it the server keeps the character flagged "changing maps" and `ChangeMapHandler` silently answers with
+  `enableActions` ("got stuck when changing maps" in the log). `GameSession.enterMap` and `Actions.expectWarp` do it.
+- A non-GM can only use a portal when its server-side position is within ~632 px of it, and the spawn point of
+  Mushroom Town is 1170 px away: send a `MOVE_PLAYER` first. Portal name, position and target come from
+  `wz/Map.wz/Map/Map0/000010000.img.xml`.
+- Broadcast races: when B logs in, A is told via `SPAWN_PLAYER`; `Pair` waits for that before A acts, so B is
+  guaranteed to be in the map's broadcast list.
+- `MOVE_PLAYER` rebroadcast = `int charId, int 0, <the client's movement bytes incl. the count byte>`.
+
+## Adding an action
+
+1. In `Actions.java` add `foo(HeadlessClient c, ...)` that sends the client packet with
+   `c.send(RecvOpcode.FOO, w -> w.writeX(...))`, and `expectFoo(...)` that decodes the reply with
+   `c.expect(SendOpcode.BAR, filter)`. The optional filter picks the right packet when several share an opcode (e.g.
+   a broadcast about another character); it reads from just after the opcode and the returned reader is rewound.
+   Put the field layout in the Javadoc and name the server handler/builder it mirrors.
+2. Write the scenario in `ActionScenarios.java` (one client: `GameSession.enterMap(...)`; needs an observer:
+   `new Pair(ctx)`), assert with `check(...)`, register it in `Scenarios`.
+3. If the server logs an identifiable line (not for opcodes in `isIgnoredRecvPacket`), add the opcode (decimal) to
+   `$expectedIds` in `run_testclient.ps1`.
+4. Check the layout against the handler source, not memory. If the server answers with `enableActions` and nothing
+   else, look in `target/smoke-server.out.log` for the handler's warning.
