@@ -71,22 +71,28 @@ public class FredrickProcessor {
                 itemids.add(it.getLeft().getItemId());
             }
 
-            if (chr.canHoldUniques(itemids)) {
-                return 0x22;
-            } else {
-                return 0x20;
-            }
+            return retrievalResponse(false, chr.canHoldUniques(itemids), 0, true, chr.getMeso());
         }
 
         int netMeso = chr.getMerchantNetMeso();
+        return retrievalResponse(true, false, netMeso, netMeso <= 0 || chr.canHoldMeso(netMeso), chr.getMeso());
+    }
+
+    /**
+     * Pure decision: 0x0 ok, 0x22 one-of-a-kind item already held, 0x20 no free slots,
+     * 0x1F meso would overflow, 0x21 cannot pay the storage fee.
+     */
+    static byte retrievalResponse(boolean spotsOk, boolean canHoldUniques, int netMeso, boolean canHoldMeso, int playerMeso) {
+        if (!spotsOk) {
+            return canHoldUniques ? (byte) 0x22 : (byte) 0x20;
+        }
+
         if (netMeso > 0) {
-            if (!chr.canHoldMeso(netMeso)) {
+            if (!canHoldMeso) {
                 return 0x1F;
             }
-        } else {
-            if (chr.getMeso() < -1 * netMeso) {
-                return 0x21;
-            }
+        } else if ((long) playerMeso < -(long) netMeso) {
+            return 0x21;
         }
 
         return 0x0;

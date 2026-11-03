@@ -5606,16 +5606,20 @@ public class Character extends AbstractCharacterObject {
         }
 
         if (mps.isOwner(this)) {
-            mps.setOpen(false);
+            List<PlayerShopItem> remaining = mps.closeAndTakeItems();
             getWorldServer().unregisterPlayerShop(mps);
 
-            for (PlayerShopItem mpsi : mps.getItems()) {
-                if (mpsi.getBundles() >= 2) {
-                    Item iItem = mpsi.getItem().copy();
-                    iItem.setQuantity((short) (mpsi.getBundles() * iItem.getQuantity()));
-                    InventoryManipulator.addFromDrop(this.getClient(), iItem, false);
-                } else if (mpsi.isExist()) {
-                    InventoryManipulator.addFromDrop(this.getClient(), mpsi.getItem(), true);
+            for (PlayerShopItem mpsi : remaining) {
+                if (!mpsi.isExist() || mpsi.getBundles() < 1) {
+                    continue;
+                }
+
+                Item iItem = mpsi.getItem().copy();
+                iItem.setQuantity((short) (mpsi.getBundles() * iItem.getQuantity()));
+
+                if (!InventoryManipulator.addFromDrop(this.getClient(), iItem, false)) {
+                    // inventory full: drop it at the owner's feet instead of silently destroying the stock
+                    getMap().spawnItemDrop(this, this, iItem, getPosition(), true, true);
                 }
             }
             mps.closeShop();
