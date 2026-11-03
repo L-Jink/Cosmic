@@ -460,6 +460,7 @@ public class CommandsExecutor {
         addCommand("expeds", 3, ExpedsCommand.class);
         addCommand("kill", 3, KillCommand.class);
         addCommand("seed", 3, SeedCommand.class);
+        addCommand("sim", 3, sim.SimCommand.class);
         addCommand("maxenergy", 3, MaxEnergyCommand.class);
         addCommand("killall", 3, KillAllCommand.class);
         addCommand("notice", 3, NoticeCommand.class);

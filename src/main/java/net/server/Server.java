@@ -942,6 +942,7 @@ public class Server {
         log.info("Cosmic is now online after {} ms.", initDuration.toMillis());
 
         OpcodeConstants.generateOpcodeNames();
+        ThreadManager.getInstance().newTask(() -> sim.SimManager.getInstance().spawnConfigured()); // no-op unless SIM_PLAYERS_ENABLED
         CommandsExecutor.getInstance();
 
         for (Channel ch : this.getAllChannels()) {
