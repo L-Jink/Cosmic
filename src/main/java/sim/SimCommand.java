@@ -44,7 +44,30 @@ public class SimCommand extends Command {
                         : params[1] + " is not an online sim.");
             }
             case "wipe" -> gm.yellowMessage("Removed all sims; deleted " + sims.wipe() + " sim character(s) from the database.");
-            default -> gm.yellowMessage("Syntax: !sim list|spawn <name>|remove <name>|wipe");
+            case "invite" -> {
+                if (params.length < 3) {
+                    gm.yellowMessage("Syntax: !sim invite <bot> <player>");
+                    return;
+                }
+                SimParty.InviteOutcome o = sims.invite(params[1], params[2]);
+                gm.yellowMessage(o == null ? params[1] + " is not an online sim." : params[1] + " invite to " + params[2] + ": " + o);
+            }
+            case "say" -> {
+                if (params.length < 3) {
+                    gm.yellowMessage("Syntax: !sim say <bot> <text>");
+                    return;
+                }
+                String text = String.join(" ", java.util.Arrays.copyOfRange(params, 2, params.length));
+                gm.yellowMessage(sims.partySay(params[1], text) ? "Sent." : params[1] + " is not an online sim in a party.");
+            }
+            case "leaveparty" -> {
+                if (params.length < 2) {
+                    gm.yellowMessage("Syntax: !sim leaveparty <bot>");
+                    return;
+                }
+                gm.yellowMessage(sims.leaveParty(params[1]) ? params[1] + " left the party." : params[1] + " is not an online sim in a party.");
+            }
+            default -> gm.yellowMessage("Syntax: !sim list|spawn <name>|remove <name>|wipe|invite <bot> <player>|say <bot> <text>|leaveparty <bot>");
         }
     }
 }

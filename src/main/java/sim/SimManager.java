@@ -3,11 +3,13 @@ package sim;
 import config.YamlConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import server.TimerManager;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 import java.util.TreeMap;
 
 /**
@@ -22,11 +24,116 @@ public class SimManager {
     private final boolean enabled;
     private final List<SimBotConfig> configured;
     private final Map<String, SimBackend.SimHandle> online = new TreeMap<>();
+    private final Map<String, SimState> states = new TreeMap<>();
+    private final SimScheduler scheduler;
+    private final Random random;
+
+    /** What a bot is doing right now. More states (following, leaving, ...) arrive in later cards. */
+    public enum SimState { IDLE, RESPONDING }
+
+    /** Runs a task once after a delay (production: TimerManager; tests: run immediately). */
+    @FunctionalInterface
+    public interface SimScheduler {
+        void schedule(Runnable task, long delayMs);
+    }
+
+    private static final String[] GREETINGS = {"hi", "hello", "hey", "hi all", "hey guys", "yo"};
+    /** Human-like pause before accepting an invite, and before the greeting. */
+    static final int ACCEPT_DELAY_MIN_MS = 1500;
+    static final int ACCEPT_DELAY_SPREAD_MS = 2500;
+    static final int GREET_DELAY_MIN_MS = 1200;
+    static final int GREET_DELAY_SPREAD_MS = 1800;
 
     public SimManager(SimBackend backend, boolean enabled, List<SimBotConfig> configured) {
+        this(backend, enabled, configured, (task, delay) -> TimerManager.getInstance().schedule(task, delay), new Random());
+    }
+
+    public SimManager(SimBackend backend, boolean enabled, List<SimBotConfig> configured, SimScheduler scheduler, Random random) {
         this.backend = backend;
         this.enabled = enabled;
         this.configured = List.copyOf(configured);
+        this.scheduler = scheduler;
+        this.random = random;
+    }
+
+    public synchronized SimState stateOf(String name) {
+        return states.getOrDefault(key(name), SimState.IDLE);
+    }
+
+    private synchronized SimBackend.SimHandle handleById(int characterId) {
+        for (SimBackend.SimHandle h : online.values()) {
+            if (h.characterId() == characterId) {
+                return h;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A real player invited this character to a party. Bots answer after a short random delay: accept (then say hi),
+     * or decline straight away when already in a party / busy answering another invite / sims are off.
+     */
+    public void onPartyInvite(int botCharacterId, int partyId) {
+        SimBackend.SimHandle h = enabled ? handleById(botCharacterId) : null;
+        if (h == null) {
+            backend.declineStrayPartyInvite(botCharacterId, partyId);
+            return;
+        }
+        String k = key(h.name());
+        synchronized (this) {
+            if (h.isInParty() || states.get(k) == SimState.RESPONDING) {
+                h.declinePartyInvite(partyId);
+                return;
+            }
+            states.put(k, SimState.RESPONDING);
+        }
+        scheduler.schedule(() -> finishPartyInvite(h, k, partyId), ACCEPT_DELAY_MIN_MS + random.nextInt(ACCEPT_DELAY_SPREAD_MS));
+    }
+
+    private void finishPartyInvite(SimBackend.SimHandle h, String k, int partyId) {
+        synchronized (this) {
+            states.remove(k);
+            if (online.get(k) != h) {
+                return; // removed while thinking
+            }
+        }
+        if (!h.acceptPartyInvite(partyId)) {
+            return;
+        }
+        scheduler.schedule(() -> {
+            synchronized (this) {
+                if (online.get(k) != h) {
+                    return;
+                }
+            }
+            h.partySay(GREETINGS[random.nextInt(GREETINGS.length)]);
+        }, GREET_DELAY_MIN_MS + random.nextInt(GREET_DELAY_SPREAD_MS));
+    }
+
+    /** GM/testing: the bot invites a real player. @return null if the bot is not online. */
+    public SimParty.InviteOutcome invite(String botName, String playerName) {
+        SimBackend.SimHandle h = onlineHandle(botName);
+        return h == null ? null : h.invite(playerName);
+    }
+
+    /** GM/testing: the bot says something in party chat. @return false if offline or not in a party. */
+    public boolean partySay(String botName, String text) {
+        SimBackend.SimHandle h = onlineHandle(botName);
+        return h != null && h.partySay(text);
+    }
+
+    /** GM/testing: the bot leaves its party. @return false if offline or not in a party. */
+    public boolean leaveParty(String botName) {
+        SimBackend.SimHandle h = onlineHandle(botName);
+        if (h == null || !h.isInParty()) {
+            return false;
+        }
+        h.leaveParty();
+        return true;
+    }
+
+    private synchronized SimBackend.SimHandle onlineHandle(String name) {
+        return online.get(key(name));
     }
 
     public static SimManager getInstance() {
@@ -96,6 +203,7 @@ public class SimManager {
     /** @return true if the bot was online and has been removed from the world (its DB row stays). */
     public synchronized boolean remove(String name) {
         SimBackend.SimHandle h = online.remove(key(name));
+        states.remove(key(name));
         if (h == null) {
             return false;
         }
