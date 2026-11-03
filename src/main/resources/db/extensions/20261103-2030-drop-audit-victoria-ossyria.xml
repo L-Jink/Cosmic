@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- E1-6 drop audit (Victoria Island / Ossyria). Corrections to drop_data seeded by 152-drop-data.sql.
+         chance is out of 1,000,000 (1000000 = always). questid = quest that must be started to get the drop. -->
+    <changeSet id="20261103-2030-drop-audit-victoria-ossyria" author="cosmic-content">
+
+        <!-- #256 Kerning PQ stage 1: Ligator (PC) must always drop a Coupon (22 Ligators, players need 8-35 coupons).
+             Was 20%, which made stage 1 almost impossible. -->
+        <sql>
+            UPDATE drop_data SET chance = 1000000
+            WHERE dropperid = 9300001 AND itemid = 4001007;
+        </sql>
+
+        <!-- Black Book (quest 6130 "Black Book"): drop was tied to quest 6191, which never asks for it. -->
+        <sql>
+            UPDATE drop_data SET questid = 6130
+            WHERE dropperid IN (5130107, 8143000) AND itemid = 4001107 AND questid = 6191;
+        </sql>
+
+        <!-- Heroic Pentagon is required by quest 6914 "A Hero's Quality" (Magician); drop was tied to 6904,
+             the Warrior version, which needs different items (4031343/4031344). -->
+        <sql>
+            UPDATE drop_data SET questid = 6914
+            WHERE dropperid = 8180001 AND itemid = 4031511 AND questid = 6904;
+        </sql>
+
+        <!-- Glass Shoes: quest 8732 does not exist in Quest.wz so the drop could never appear.
+             Quest 4207 is the only quest that asks for Glass Shoes. -->
+        <sql>
+            UPDATE drop_data SET questid = 4207
+            WHERE dropperid = 3110100 AND itemid = 4031405 AND questid = 8732;
+        </sql>
+
+        <!-- Quest 1018 "Todd's How-to-Hunt" (Maple Island) needs a Jr. Sentinel Shellpiece from the
+             Tutorial Jr. Sentinel, but no drop row existed. -->
+        <sql>
+            INSERT INTO drop_data (dropperid, itemid, minimum_quantity, maximum_quantity, questid, chance)
+            SELECT 9300018, 4000142, 1, 1, 1018, 1000000 FROM DUAL
+            WHERE NOT EXISTS (SELECT 1 FROM drop_data WHERE dropperid = 9300018 AND itemid = 4000142);
+        </sql>
+
+        <!-- Meso ranges (itemid 0 rows): typos versus the v83-era mob database (BeforeBigBang Hidden Street). -->
+        <sql>
+            UPDATE drop_data SET minimum_quantity = 76,  maximum_quantity = 114 WHERE dropperid = 3110100 AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 176, maximum_quantity = 264 WHERE dropperid IN (4230102, 4230104) AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 304, maximum_quantity = 456 WHERE dropperid = 6130103 AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 328, maximum_quantity = 492 WHERE dropperid IN (6300000, 6300001, 6300002) AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 212, maximum_quantity = 318 WHERE dropperid = 5100002 AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 144, maximum_quantity = 216 WHERE dropperid = 4230106 AND itemid = 0;
+            UPDATE drop_data SET minimum_quantity = 96,  maximum_quantity = 144 WHERE dropperid = 3230405 AND itemid = 0;
+        </sql>
+
+        <!-- Storybook quest items were dropping for everybody (questid 0). Tie them to their quests:
+             4161015 Burning Book of Fire -> 6270, 4161016 Frozen Book of Ice -> 6260,
+             4161018 Ancient Book -> 6100. -->
+        <sql>
+            UPDATE drop_data SET questid = 6270 WHERE itemid = 4161015 AND questid = 0 AND dropperid IN (8140102, 9500165);
+            UPDATE drop_data SET questid = 6260 WHERE itemid = 4161016 AND questid = 0 AND dropperid IN (8140103, 9500166);
+            UPDATE drop_data SET questid = 6100 WHERE itemid = 4161018 AND questid = 0 AND dropperid IN (8150100, 8150101);
+        </sql>
+    </changeSet>
+</databaseChangeLog>
