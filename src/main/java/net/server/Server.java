@@ -939,6 +939,7 @@ public class Server {
 
         online = true;
         Duration initDuration = Duration.between(beforeInit, Instant.now());
+        server.liveops.EventCalendar.start(YamlConfig.config.event_calendar, this::getWorlds);
         log.info("Cosmic is now online after {} ms.", initDuration.toMillis());
 
         OpcodeConstants.generateOpcodeNames();
