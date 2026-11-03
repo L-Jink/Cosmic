@@ -256,6 +256,12 @@ public class EventCalendar {
 
     /** Production wiring: starts the periodic tick on the shared TimerManager. No-op when disabled. */
     public static EventCalendar start(EventCalendarConfig cfg, Supplier<List<World>> worldList) {
+        return start(cfg, worldList, null);
+    }
+
+    /** As above; {@code clock} (null = real time in the configured zone) lets tests drive the real scheduler. */
+    static EventCalendar start(EventCalendarConfig cfg, Supplier<List<World>> worldList,
+                               java.util.function.Function<ZoneId, ZonedDateTime> clock) {
         Supplier<Map<Integer, ? extends RateSink>> sinks = () -> {
             Map<Integer, RateSink> m = new HashMap<>();
             for (World w : worldList.get()) {
@@ -269,9 +275,12 @@ public class EventCalendar {
         }
         ZoneId zone = parseZone(cfg.TIMEZONE);
         long interval = Math.max(1, cfg.CHECK_INTERVAL_SECONDS) * 1000L;
+        java.util.function.Function<ZoneId, ZonedDateTime> now = clock != null ? clock : ZonedDateTime::now;
+        log.info("Event calendar: zone={} (now {} there; blank TIMEZONE = server.TIMEZONE), check every {}s, windows={}",
+                zone, now.apply(zone).toLocalTime().withNano(0), interval / 1000, cal.getWindows());
         server.TimerManager.getInstance().register(() -> {
             try {
-                cal.tick(ZonedDateTime.now(zone));
+                cal.tick(now.apply(zone));
             } catch (RuntimeException ex) {
                 log.warn("Event calendar tick failed", ex);
             }
