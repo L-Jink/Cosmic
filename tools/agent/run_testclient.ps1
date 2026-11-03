@@ -90,7 +90,7 @@ try {
         if (-not $echo) { throw "scenario output has no 'map chat echo OK' line (server did not treat us as inside the map)" }
     }
 
-    if (-not $NoServer -and $Scenario -eq "login-enter-map") {
+    if (-not $NoServer) {
         # Give the server a moment to finish logging the disconnect; poll rather than sleep a fixed time.
         $deadline = (Get-Date).AddSeconds(10)
         do {
@@ -119,6 +119,16 @@ try {
         } while ((Get-Date) -lt $deadline)
         if (-not $saved) { throw "server never saved the character after we closed the socket (unclean logout?)" }
         Write-Host "[testclient] server log OK (clean logout): $($saved[0].Line.Trim())"
+        # Per-scenario: the client packet the scenario sends must show up in the server's received-packet log.
+        # Ids are decimal RecvOpcode values: CHANGE_MAP 0x26=38, GENERAL_CHAT 0x31=49. MOVE_PLAYER (41) is on the server's
+        # ignored-recv-packet list (LoggingUtil.isIgnoredRecvPacket), so the move scenario relies on the reply packet only.
+        $expectedIds = @{ "chat" = 49; "change-map" = 38 }
+        if ($expectedIds.ContainsKey($Scenario)) {
+            $id = $expectedIds[$Scenario]
+            $seen = Select-String -Path $outLog -Pattern "Received packet id $id$" -ErrorAction SilentlyContinue
+            if (-not $seen) { throw "server log has no 'Received packet id $id' line for scenario '$Scenario' in $outLog" }
+            Write-Host "[testclient] server log OK: $($seen[0].Line.Trim())"
+        }
         $bad = Select-String -Path $outLog, "target\smoke-server.err.log" -Pattern "Error in packet handler" -ErrorAction SilentlyContinue
         if ($bad) { throw "server logged a packet-handler error: $($bad[0].Line.Trim())" }
         Write-Host "[testclient] server log OK: no 'Error in packet handler' lines"

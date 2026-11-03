@@ -9,6 +9,9 @@ public final class Scenarios {
 
     static {
         ALL.put("login-enter-map", new LoginEnterMapScenario());
+        ALL.put("chat", new ActionScenarios.Chat());
+        ALL.put("move", new ActionScenarios.Move());
+        ALL.put("change-map", new ActionScenarios.ChangeMap());
     }
 
     private Scenarios() {
