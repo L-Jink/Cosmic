@@ -581,6 +581,10 @@ public class PlayerShop extends AbstractMapObject {
         List<PlayerShopItem> list = new LinkedList<>();
         List<PlayerShopItem> all = new ArrayList<>();
 
+        if (!open.get()) {
+            return list;
+        }
+
         synchronized (items) {
             all.addAll(items);
         }
