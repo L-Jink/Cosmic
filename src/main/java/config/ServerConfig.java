@@ -303,4 +303,9 @@ public class ServerConfig {
     //Simulated players (see sim/ and docs/agents/decisions/0001-simulated-players.md)
     public boolean SIM_PLAYERS_ENABLED = false;
     public java.util.List<Map<String, Object>> SIM_BOTS = new java.util.ArrayList<>();
+    public boolean SIM_ROUTINE_ENABLED = true;
+    public String SIM_PHRASES_FILE = "config/sim_phrases.yaml";
+    public java.util.List<Object> SIM_POPULATION_CURVE = new java.util.ArrayList<>();
+    public int SIM_MAX_BOTS_PER_MAP = 12;
+    public int SIM_MAX_BOTS_PER_CHANNEL = 30;
 }

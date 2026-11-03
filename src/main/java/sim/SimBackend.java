@@ -1,5 +1,8 @@
 package sim;
 
+import java.awt.Point;
+import java.awt.Rectangle;
+
 /**
  * The parts of the sim framework that touch the live server and the database. Split out so
  * {@link SimManager} logic can be unit tested without a running server.
@@ -22,6 +25,10 @@ public interface SimBackend {
 
     /** Clears a pending party invite addressed to a sim that has no live handle (e.g. sims were switched off). */
     default void declineStrayPartyInvite(int characterId, int partyId) {
+    }
+
+    /** A spot on a foothold: where a bot can stand. */
+    record Ground(int x, int y, int fh) {
     }
 
     /** An online bot. */
@@ -49,5 +56,42 @@ public interface SimBackend {
         SimParty.InviteOutcome invite(String playerName);
 
         void leaveParty();
+
+        // --- idle routine (defaults make test fakes and old handles do nothing) ---
+
+        /** Where the bot stands, or null if unknown. */
+        default Point position() {
+            return null;
+        }
+
+        /** The map's walkable area; a bot never walks outside it. */
+        default Rectangle walkBounds() {
+            return null;
+        }
+
+        /** Foothold surface at x looking down from y, or null if there is none. */
+        default Ground groundBelow(int x, int y) {
+            return null;
+        }
+
+        /** Walks (visibly to everyone in the map) to a spot on a foothold. */
+        default void walkTo(Ground to, boolean right, int durationMs) {
+        }
+
+        /** Sits on a chair item; false if it could not. */
+        default boolean sit(int chairItemId) {
+            return false;
+        }
+
+        default void stand() {
+        }
+
+        default boolean isSitting() {
+            return false;
+        }
+
+        /** Says something in the map's general chat. */
+        default void say(String text) {
+        }
     }
 }

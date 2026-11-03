@@ -9,6 +9,8 @@ import client.inventory.Inventory;
 import client.inventory.InventoryType;
 import client.inventory.Item;
 import net.server.Server;
+import server.maps.Foothold;
+import server.maps.FootholdTree;
 import net.server.channel.Channel;
 import net.server.world.World;
 import org.slf4j.Logger;
@@ -263,6 +265,58 @@ public class LiveSimBackend implements SimBackend {
         @Override
         public void leaveParty() {
             SimParty.leave(chr);
+        }
+
+        @Override
+        public java.awt.Point position() {
+            return chr.getPosition();
+        }
+
+        @Override
+        public java.awt.Rectangle walkBounds() {
+            return chr.getMap().getMapArea();
+        }
+
+        @Override
+        public Ground groundBelow(int x, int y) {
+            FootholdTree tree = chr.getMap().getFootholds();
+            Foothold fh = tree == null ? null : tree.findBelow(new java.awt.Point(x, y));
+            if (fh == null || fh.isWall()) {
+                return null;
+            }
+            int gy = fh.getY1();
+            if (fh.getY1() != fh.getY2()) {
+                gy = fh.getY1() + (int) Math.round((double) (fh.getY2() - fh.getY1()) * (x - fh.getX1()) / (fh.getX2() - fh.getX1()));
+            }
+            return new Ground(x, gy, fh.getId());
+        }
+
+        @Override
+        public void walkTo(Ground to, boolean right, int durationMs) {
+            chr.getMap().movePlayer(chr, new java.awt.Point(to.x(), to.y()));
+            chr.setStance(SimPackets.standStance(right));
+            chr.getMap().broadcastMessage(chr, SimPackets.walk(chr.getId(), to.x(), to.y(), to.fh(), right, durationMs), false);
+        }
+
+        @Override
+        public boolean sit(int chairItemId) {
+            chr.sitChair(chairItemId);
+            return chr.getChair() >= 0;
+        }
+
+        @Override
+        public void stand() {
+            chr.sitChair(-1);
+        }
+
+        @Override
+        public boolean isSitting() {
+            return chr.getChair() >= 0;
+        }
+
+        @Override
+        public void say(String text) {
+            chr.getMap().broadcastMessage(tools.PacketCreator.getChatText(chr.getId(), text, false, 0));
         }
     }
 }

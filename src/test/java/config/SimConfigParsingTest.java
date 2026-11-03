@@ -26,6 +26,18 @@ class SimConfigParsingTest {
     }
 
     @Test
+    void shippedConfigHasValidRoutineSettings() throws IOException {
+        YamlConfig cfg = YamlConfig.load(Path.of(YamlConfig.CONFIG_FILE_NAME), null, null);
+
+        assertTrue(cfg.server.SIM_ROUTINE_ENABLED);
+        assertEquals(24, cfg.server.SIM_POPULATION_CURVE.size());
+        assertEquals(java.util.Arrays.toString(sim.SimPopulation.DEFAULT_CURVE),
+                java.util.Arrays.toString(sim.SimPopulation.parseCurve(cfg.server.SIM_POPULATION_CURVE)));
+        assertTrue(cfg.server.SIM_MAX_BOTS_PER_MAP > 0 && cfg.server.SIM_MAX_BOTS_PER_CHANNEL > 0);
+        assertTrue(Files.exists(Path.of(cfg.server.SIM_PHRASES_FILE)));
+    }
+
+    @Test
     void localOverrideCanEnableSims() throws IOException {
         Path local = Files.createTempFile("sim-local", ".yaml");
         try {

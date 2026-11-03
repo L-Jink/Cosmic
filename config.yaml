@@ -474,6 +474,11 @@ server:
 
     #Simulated players (residents). Off by default; bots are flagged characters.is_sim=1 in the DB.
     SIM_PLAYERS_ENABLED: false
+    SIM_ROUTINE_ENABLED: true           #idle bots walk, sit and chat; how many are online follows SIM_POPULATION_CURVE
+    SIM_PHRASES_FILE: config/sim_phrases.yaml
+    SIM_POPULATION_CURVE: [25, 15, 10, 10, 10, 15, 25, 35, 45, 50, 55, 60, 65, 65, 65, 70, 75, 85, 95, 100, 100, 90, 65, 40]  #percent of SIM_BOTS online, hours 0-23 (server local time)
+    SIM_MAX_BOTS_PER_MAP: 12            #per channel+map
+    SIM_MAX_BOTS_PER_CHANNEL: 30
     SIM_BOTS:                           #name 4-12 letters/digits; job = v83 job id; channel is 1-based; gender 0/1 optional
       - {name: Mapleaf, job: 110, level: 35, homeMap: 100000000, channel: 1}
       - {name: Moonpie, job: 310, level: 40, homeMap: 100000000, channel: 1}

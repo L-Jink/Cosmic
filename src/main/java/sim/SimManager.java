@@ -49,11 +49,164 @@ public class SimManager {
     }
 
     public SimManager(SimBackend backend, boolean enabled, List<SimBotConfig> configured, SimScheduler scheduler, Random random) {
+        this(backend, enabled, configured, scheduler, random, null, null);
+    }
+
+    /**
+     * @param population when not null, only the bots the hourly curve wants are online
+     * @param phrases    when not null, idle bots walk, sit and chat (the routine); null = bots just stand
+     */
+    public SimManager(SimBackend backend, boolean enabled, List<SimBotConfig> configured, SimScheduler scheduler, Random random,
+                      SimPopulation population, SimPhrases phrases) {
         this.backend = backend;
         this.enabled = enabled;
         this.configured = List.copyOf(configured);
         this.scheduler = scheduler;
         this.random = random;
+        this.population = population;
+        this.phrases = phrases;
+    }
+
+    // ---------------------------------------------------------------- idle routine + population
+
+    private final SimPopulation population;
+    private final SimPhrases phrases;
+    private final Map<String, Routine> routines = new TreeMap<>();
+    /** Bots a GM removed by hand: the population curve leaves them offline until a GM spawns them again. */
+    private final java.util.Set<String> manuallyOff = new java.util.TreeSet<>();
+    private java.util.concurrent.ScheduledFuture<?> routineTask;
+    private long nextPopulationAt;
+
+    static final int CHAIR_ITEM = 3010000; // The Relaxer
+    static final long TICK_MS = 1000;
+    static final long POPULATION_PERIOD_MIN_MS = 20_000;
+    static final long POPULATION_PERIOD_SPREAD_MS = 20_000;
+    static final long CHAT_GAP_MIN_MS = 90_000;
+    static final long CHAT_GAP_SPREAD_MS = 210_000;
+
+    /** Per-bot idle-routine bookkeeping. */
+    private static final class Routine {
+        long nextActionAt;
+        long nextChatAt;
+        String lastPhrase;
+    }
+
+    /** Starts the one shared task that drives every bot's routine and the population curve. */
+    synchronized void startRoutine() {
+        if (!enabled || phrases == null || routineTask != null) {
+            return;
+        }
+        routineTask = TimerManager.getInstance().register(() -> {
+            try {
+                tick(System.currentTimeMillis(), java.time.LocalTime.now().getHour());
+            } catch (Throwable t) { // an exception would silently cancel the periodic task
+                log.warn("Sim routine tick failed", t);
+            }
+        }, TICK_MS, TICK_MS);
+    }
+
+    synchronized void stopRoutine() {
+        if (routineTask != null) {
+            routineTask.cancel(false);
+            routineTask = null;
+        }
+    }
+
+    /** One step of the routine for every online bot. {@code hour} is the local hour of day (0-23). */
+    public void tick(long nowMs, int hour) {
+        if (!enabled || phrases == null) {
+            return;
+        }
+        List<Map.Entry<String, SimBackend.SimHandle>> snapshot;
+        synchronized (this) {
+            populationStep(nowMs, hour);
+            snapshot = new ArrayList<>(online.entrySet());
+        }
+        for (Map.Entry<String, SimBackend.SimHandle> e : snapshot) {
+            try {
+                routineStep(e.getKey(), e.getValue(), nowMs);
+            } catch (RuntimeException ex) {
+                log.warn("Sim routine failed for {}: {}", e.getKey(), ex.toString());
+            }
+        }
+    }
+
+    /** Brings one bot in or out (at most) towards what the curve wants, so crowds build up and thin out gradually. */
+    private void populationStep(long now, int hour) {
+        if (population == null || now < nextPopulationAt) {
+            return;
+        }
+        nextPopulationAt = now + POPULATION_PERIOD_MIN_MS + random.nextInt((int) POPULATION_PERIOD_SPREAD_MS);
+        java.util.Set<String> wanted = new java.util.TreeSet<>();
+        for (SimBotConfig b : population.desired(configured, hour)) {
+            wanted.add(key(b.name()));
+        }
+        for (String k : wanted) {
+            if (!online.containsKey(k) && !manuallyOff.contains(k)) {
+                spawnInternal(findConfigured(k));
+                return;
+            }
+        }
+        for (Map.Entry<String, SimBackend.SimHandle> e : online.entrySet()) {
+            SimBackend.SimHandle h = e.getValue();
+            if (!wanted.contains(e.getKey()) && !h.isInParty() && states.get(e.getKey()) == null) {
+                removeInternal(e.getKey());
+                return;
+            }
+        }
+    }
+
+    private void routineStep(String k, SimBackend.SimHandle h, long now) {
+        Routine r;
+        synchronized (this) {
+            if (online.get(k) != h) {
+                return;
+            }
+            r = routines.get(k);
+            if (r == null) {
+                r = new Routine();
+                r.nextActionAt = now + 2000 + random.nextInt(6000);
+                r.nextChatAt = now + 30_000 + random.nextInt(90_000);
+                routines.put(k, r);
+            }
+            if (states.get(k) != null || h.isInParty()) {
+                return; // busy answering a party invite / partied: the routine stays out of the way
+            }
+        }
+        if (now >= r.nextChatAt) {
+            String line = phrases.pick(random, r.lastPhrase);
+            r.lastPhrase = line;
+            r.nextChatAt = now + CHAT_GAP_MIN_MS + random.nextInt((int) CHAT_GAP_SPREAD_MS);
+            h.say(line);
+        }
+        if (now < r.nextActionAt) {
+            return;
+        }
+        if (h.isSitting()) {
+            h.stand();
+            r.nextActionAt = now + 2000 + random.nextInt(4000);
+            return;
+        }
+        int roll = random.nextInt(100);
+        if (roll < 55) {
+            java.awt.Point pos = h.position();
+            java.awt.Rectangle bounds = h.walkBounds();
+            SimRoutine.Move move = pos == null || bounds == null ? null
+                    : SimRoutine.planWalk(pos, bounds, h::groundBelow, random);
+            if (move != null) {
+                h.walkTo(move.to(), move.right(), move.durationMs());
+                r.nextActionAt = now + move.durationMs() + 1500 + random.nextInt(6000);
+                return;
+            }
+        } else if (roll < 65 && h.sit(CHAIR_ITEM)) {
+            r.nextActionAt = now + 30_000 + random.nextInt(90_000);
+            return;
+        }
+        r.nextActionAt = now + 2000 + random.nextInt(8000); // just stand around for a bit
+    }
+
+    private SimBotConfig findConfigured(String k) {
+        return configured.stream().filter(b -> key(b.name()).equals(k)).findFirst().orElseThrow();
     }
 
     public synchronized SimState stateOf(String name) {
@@ -141,9 +294,14 @@ public class SimManager {
         if (m == null) {
             synchronized (SimManager.class) {
                 if (instance == null) {
-                    instance = new SimManager(new LiveSimBackend(),
-                            YamlConfig.config.server.SIM_PLAYERS_ENABLED,
-                            SimBotConfig.parse(YamlConfig.config.server.SIM_BOTS));
+                    var cfg = YamlConfig.config.server;
+                    boolean routine = cfg.SIM_ROUTINE_ENABLED;
+                    instance = new SimManager(new LiveSimBackend(), cfg.SIM_PLAYERS_ENABLED,
+                            SimBotConfig.parse(cfg.SIM_BOTS),
+                            (task, delay) -> TimerManager.getInstance().schedule(task, delay), new Random(),
+                            routine ? new SimPopulation(SimPopulation.parseCurve(cfg.SIM_POPULATION_CURVE),
+                                    cfg.SIM_MAX_BOTS_PER_MAP, cfg.SIM_MAX_BOTS_PER_CHANNEL) : null,
+                            routine && cfg.SIM_PLAYERS_ENABLED ? SimPhrases.load(cfg.SIM_PHRASES_FILE) : null);
                 }
                 m = instance;
             }
@@ -168,8 +326,19 @@ public class SimManager {
         if (!enabled) {
             return 0;
         }
+        int spawned = spawnInitial(java.time.LocalTime.now().getHour());
+        startRoutine();
+        return spawned;
+    }
+
+    /** Spawns the bots the curve wants at {@code hour} (all configured bots when there is no curve). */
+    synchronized int spawnInitial(int hour) {
+        if (!enabled) {
+            return 0;
+        }
         int spawned = 0;
-        for (SimBotConfig bot : configured) {
+        List<SimBotConfig> initial = population == null ? configured : population.desired(configured, hour);
+        for (SimBotConfig bot : initial) {
             if (spawn(bot.name()) == SpawnResult.SPAWNED) {
                 spawned++;
             }
@@ -188,6 +357,11 @@ public class SimManager {
         if (bot == null) {
             return SpawnResult.UNKNOWN;
         }
+        manuallyOff.remove(key(bot.name()));
+        return spawnInternal(bot);
+    }
+
+    private SpawnResult spawnInternal(SimBotConfig bot) {
         if (online.containsKey(key(bot.name()))) {
             return SpawnResult.ALREADY_ONLINE;
         }
@@ -202,6 +376,12 @@ public class SimManager {
 
     /** @return true if the bot was online and has been removed from the world (its DB row stays). */
     public synchronized boolean remove(String name) {
+        manuallyOff.add(key(name));
+        return removeInternal(key(name));
+    }
+
+    private boolean removeInternal(String name) {
+        routines.remove(key(name));
         SimBackend.SimHandle h = online.remove(key(name));
         states.remove(key(name));
         if (h == null) {
@@ -216,7 +396,9 @@ public class SimManager {
         for (String name : new ArrayList<>(online.keySet())) {
             remove(name);
         }
-        return backend.wipeDatabase();
+        int removed = backend.wipeDatabase();
+        manuallyOff.clear();
+        return removed;
     }
 
     public synchronized boolean isOnline(String name) {
