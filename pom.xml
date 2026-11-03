@@ -214,6 +214,11 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${maven-surefire-plugin.version}</version>
+                <configuration>
+                    <!-- WZFiles.DIRECTORY is a static final read once from -Dwz-path; tests that touch
+                         GameConstants/MapleMap freeze it and break MobSkillFactoryTest. One JVM per class. -->
+                    <reuseForks>false</reuseForks>
+                </configuration>
             </plugin>
 
             <!-- Enable assembling jar that includes all dependencies -->
