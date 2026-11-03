@@ -883,6 +883,7 @@ public class Server {
         futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));
         initExecutor.shutdown();
 
+        server.liveops.EventCalendar.captureHostZone(); // must run before the JVM default zone is overridden below
         TimeZone.setDefault(TimeZone.getTimeZone(YamlConfig.config.server.TIMEZONE));
 
         final int worldCount = Math.min(GameConstants.WORLD_NAMES.length, YamlConfig.config.server.WORLDS);
@@ -939,6 +940,7 @@ public class Server {
 
         online = true;
         Duration initDuration = Duration.between(beforeInit, Instant.now());
+        server.liveops.EventCalendar.start(YamlConfig.config.event_calendar, this::getWorlds);
         log.info("Cosmic is now online after {} ms.", initDuration.toMillis());
 
         OpcodeConstants.generateOpcodeNames();

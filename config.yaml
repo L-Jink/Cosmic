@@ -157,6 +157,24 @@ worlds:
     channels: 3
 
 
+#Event calendar: timed windows that multiply a world's EXP / drop / meso rate. Off by default.
+#Overlapping windows do not stack (highest multiplier wins); base rates are restored when the last window ends.
+#Entry: name, world (id or "all"), days (e.g. [SAT, SUN]; omit = daily), start ("HH:mm"), duration_minutes,
+#exp_mult / drop_mult / meso_mult (whole numbers >= 1), announce (text for the announcement feature, not used yet).
+event_calendar:
+  ENABLED: false
+  TIMEZONE: ""                 #IANA zone like "Asia/Singapore" that the window "start" times are in. Blank = the PC/server machine's own zone (NOT server.TIMEZONE below, which is GMT)
+  CHECK_INTERVAL_SECONDS: 15
+  events: []
+  #  - name: Weekend 2x EXP/Drop
+  #    world: all
+  #    days: [SAT, SUN]
+  #    start: "18:00"
+  #    duration_minutes: 180
+  #    exp_mult: 2
+  #    drop_mult: 2
+  #    announce: "Weekend 2x EXP and drop event is live!"
+
 server:
     #Database Configuration
     DB_URL_FORMAT: "jdbc:mysql://%s:3306/cosmic" # If the docker ENV for DB_HOST is anything but "db", this string format should be changed from 3306 to 3307 (or whichever port it was changed to in docker) 
