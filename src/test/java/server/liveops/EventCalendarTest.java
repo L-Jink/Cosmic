@@ -143,4 +143,27 @@ class EventCalendarTest {
         c.restoreAll();
         assertEquals(10, w.exp);
     }
+
+    @Test
+    void blankTimezoneIsThePcZoneEvenAfterJvmDefaultIsForcedToGmt() {
+        java.util.TimeZone original = java.util.TimeZone.getDefault();
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Singapore"));
+            EventCalendar.captureHostZone(); // no-op if an earlier test already captured; both cases are checked below
+            ZoneId pc = EventCalendar.hostZone();
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("GMT")); // what Server.init does
+            assertEquals(pc, EventCalendar.parseZone(""));
+            assertEquals(pc, EventCalendar.parseZone(null));
+            assertEquals(pc, EventCalendar.parseZone("   "));
+            assertEquals(pc, EventCalendar.parseZone("Not/AZone"));
+        } finally {
+            java.util.TimeZone.setDefault(original);
+        }
+    }
+
+    @Test
+    void explicitTimezoneWins() {
+        assertEquals(ZoneId.of("Asia/Singapore"), EventCalendar.parseZone("Asia/Singapore"));
+        assertEquals(ZoneId.of("America/New_York"), EventCalendar.parseZone(" America/New_York "));
+    }
 }

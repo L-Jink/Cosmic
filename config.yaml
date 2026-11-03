@@ -163,7 +163,7 @@ worlds:
 #exp_mult / drop_mult / meso_mult (whole numbers >= 1), announce (text for the announcement feature, not used yet).
 event_calendar:
   ENABLED: false
-  TIMEZONE: ""                 #IANA zone like "Asia/Singapore" that the window "start" times are in. Blank = server.TIMEZONE below (GMT by default, NOT your PC's clock!)
+  TIMEZONE: ""                 #IANA zone like "Asia/Singapore" that the window "start" times are in. Blank = the PC/server machine's own zone (NOT server.TIMEZONE below, which is GMT)
   CHECK_INTERVAL_SECONDS: 15
   events: []
   #  - name: Weekend 2x EXP/Drop
