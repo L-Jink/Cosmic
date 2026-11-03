@@ -4,8 +4,8 @@ Owner: `cosmic-lead` keeps this file current. Each epic becomes a parent Kanban 
 child cards ≤ 1 day of agent work each, using `TASK_TEMPLATE.md`.
 
 Priority order: **E0 → E1 → E2 → E4 → E5 → E3 (deferred)**. The lead must not start E4/E5 cards until E0 is done.
-E3 (simulated players) is DEFERRED by the human (2026-11-02): low priority, large effort. No E3 cards until the human
-re-activates it. E2 no longer runs in parallel with E3.
+E3 (simulated players) was deferred 2026-11-02 and RE-ACTIVATED by the human 2026-11-03: ADR 0001 accepted, social
+features first (party/chat with bots), fixed home maps + fixed names. Economy guardrails are not a priority.
 
 ---
 
@@ -31,7 +31,7 @@ Agents can't fix what they can't test.
 - Anti-dupe/exploit review of every item-moving handler (pairs with cosmic-reviewer).
 - Economy telemetry: daily mesos created/destroyed, item price index from merchant listings → `docs/agents/economy.md`.
 
-## E3 — Simulated players (cosmic-sim) — see ADR 0001 — **DEFERRED, do not start**
+## E3 — Simulated players (cosmic-sim) — see ADR 0001 — **ACTIVE (social-first, see ADR 0001)**
 Phase 1 (server-side "residents"):
 - Socketless `Client` + real `Character` rows flagged `is_sim`, spawned into towns/training maps on a schedule.
 - Behaviour tree: idle/walk in town, train in level-appropriate maps (move + use attack skill packets broadcast
@@ -86,5 +86,5 @@ Running it:
 - [ ] Rules/abuse plan: who can GM, what to do about dupers
 
 ## Concurrency cap (set by human 2026-11-03)
-Max 2 cards `running`/`ready` at once (token budget). Decompose cards must not auto-start children: create
-sub-cards blocked, and the lead unblocks them 1-2 at a time in E0 -> E1 -> E2 order. E3/E5 stay paused.
+Max 4 cards `running`/`ready` at once (token budget; raised from 2 by human 2026-11-03). Decompose cards must not auto-start children: create
+sub-cards blocked, and the lead unblocks them 2-4 at a time in E0 -> E1 -> E2 order. E3/E5 stay paused.
