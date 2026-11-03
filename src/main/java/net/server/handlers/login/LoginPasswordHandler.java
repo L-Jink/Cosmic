@@ -67,6 +67,11 @@ public final class LoginPasswordHandler implements PacketHandler {
             return;
         }
 
+        if (server.liveops.Maintenance.isLoginBlocked()) {   // maintenance countdown reached T-0
+            c.sendPacket(PacketCreator.getLoginFailed(server.liveops.Maintenance.LOGIN_BLOCKED_REASON));
+            return;
+        }
+
         String login = p.readString();
         String pwd = p.readString();
         c.setAccountName(login);
