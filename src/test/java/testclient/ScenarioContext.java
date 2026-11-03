@@ -32,6 +32,11 @@ public final class ScenarioContext {
         return log;
     }
 
+    /** 6 hex digits, unique per run: for throwaway account and character names (a-f0-9 never hits the name filter). */
+    public static String uniqueSuffix() {
+        return String.format("%06x", (System.nanoTime() ^ System.currentTimeMillis()) & 0xFFFFFF);
+    }
+
     /** Throw a scenario failure if the condition does not hold. */
     public static void check(boolean condition, String message) {
         if (!condition) {

@@ -260,6 +260,11 @@ public class PlayerShop extends AbstractMapObject {
     public boolean buy(Client c, int item, short quantity) {
         synchronized (items) {
             if (isVisitor(c.getPlayer())) {
+                if (!isOpen() || item < 0 || item >= items.size()) {
+                    c.sendPacket(PacketCreator.enableActions());
+                    return false;
+                }
+
                 PlayerShopItem pItem = items.get(item);
                 Item newItem = pItem.getItem().copy();
 
@@ -276,7 +281,13 @@ public class PlayerShop extends AbstractMapObject {
 
                 visitorLock.lock();
                 try {
-                    int price = (int) Math.min((float) pItem.getPrice() * quantity, Integer.MAX_VALUE);
+                    long total = (long) pItem.getPrice() * quantity;
+                    if (total > Integer.MAX_VALUE) {
+                        c.sendPacket(PacketCreator.enableActions());
+                        return false;
+                    }
+
+                    int price = (int) total;
 
                     if (c.getPlayer().getMeso() >= price) {
                         if (!owner.canHoldMeso(price)) {    // thanks Rohenn for noticing owner hold check misplaced
@@ -479,7 +490,17 @@ public class PlayerShop extends AbstractMapObject {
 
     public List<PlayerShopItem> getItems() {
         synchronized (items) {
-            return Collections.unmodifiableList(items);
+            return Collections.unmodifiableList(new ArrayList<>(items));   // snapshot, callers iterate unlocked
+        }
+    }
+
+    /**
+     * Closes the shop to buyers and returns a snapshot of the stock for the owner, atomically with respect to buy().
+     */
+    public List<PlayerShopItem> closeAndTakeItems() {
+        synchronized (items) {
+            setOpen(false);
+            return new ArrayList<>(items);
         }
     }
 
@@ -559,6 +580,10 @@ public class PlayerShop extends AbstractMapObject {
     public List<PlayerShopItem> sendAvailableBundles(int itemid) {
         List<PlayerShopItem> list = new LinkedList<>();
         List<PlayerShopItem> all = new ArrayList<>();
+
+        if (!open.get()) {
+            return list;
+        }
 
         synchronized (items) {
             all.addAll(items);

@@ -14,3 +14,8 @@
 - Any server a worker starts by hand (java -jar ...) must be stopped before the card is completed:
   `powershell -ExecutionPolicy Bypass -File tools/agent/stop_servers.ps1`. Leftover servers hold port 8484 and hang the next smoke test.
 - Before running the smoke test, merge origin/master into the card branch (git fetch origin && git merge origin/master) so the fixed smoke_test.ps1 (PR #15) is used; the old one leaks servers.
+6. Testing a PR by hand: one command builds and starts the server for a PR (or any folder), prints
+   `SERVER READY - log in now`, and Ctrl+C stops it:
+   `powershell -ExecutionPolicy Bypass -File tools/agent/start_server.ps1 -Pr 7`
+   Other forms: `-Dir <folder>` (a specific worktree) or no parameters (current folder). It refuses to start
+   if port 8484 is already in use.

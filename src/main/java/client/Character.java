@@ -82,6 +82,9 @@ import net.server.PlayerBuffValueHolder;
 import net.server.PlayerCoolDownValueHolder;
 import net.server.Server;
 import net.server.coordinator.world.InviteCoordinator;
+import net.server.coordinator.world.InviteCoordinator.InviteResult;
+import net.server.coordinator.world.InviteCoordinator.InviteResultType;
+import net.server.coordinator.world.InviteCoordinator.InviteType;
 import net.server.guild.Alliance;
 import net.server.guild.Guild;
 import net.server.guild.GuildCharacter;
@@ -5606,16 +5609,20 @@ public class Character extends AbstractCharacterObject {
         }
 
         if (mps.isOwner(this)) {
-            mps.setOpen(false);
+            List<PlayerShopItem> remaining = mps.closeAndTakeItems();
             getWorldServer().unregisterPlayerShop(mps);
 
-            for (PlayerShopItem mpsi : mps.getItems()) {
-                if (mpsi.getBundles() >= 2) {
-                    Item iItem = mpsi.getItem().copy();
-                    iItem.setQuantity((short) (mpsi.getBundles() * iItem.getQuantity()));
-                    InventoryManipulator.addFromDrop(this.getClient(), iItem, false);
-                } else if (mpsi.isExist()) {
-                    InventoryManipulator.addFromDrop(this.getClient(), mpsi.getItem(), true);
+            for (PlayerShopItem mpsi : remaining) {
+                if (!mpsi.isExist() || mpsi.getBundles() < 1) {
+                    continue;
+                }
+
+                Item iItem = mpsi.getItem().copy();
+                iItem.setQuantity((short) (mpsi.getBundles() * iItem.getQuantity()));
+
+                if (!InventoryManipulator.addFromDrop(this.getClient(), iItem, false)) {
+                    // inventory full: drop it at the owner's feet instead of silently destroying the stock
+                    getMap().spawnItemDrop(this, this, iItem, getPosition(), true, true);
                 }
             }
             mps.closeShop();
@@ -6485,6 +6492,22 @@ public class Character extends AbstractCharacterObject {
                 }
             }
         }
+    }
+
+    /**
+     * Accepts a pending party invitation, same as the client's "join party" request. Usable by characters that
+     * have no network connection (see Client.createSocketless()).
+     *
+     * @return true if the invitation was still valid and the party was joined
+     */
+    public boolean acceptPartyInvite(int partyId) {
+        InviteResult inviteRes = InviteCoordinator.answerInvite(InviteType.PARTY, getId(), partyId, true);
+        if (inviteRes.result == InviteResultType.ACCEPTED) {
+            return Party.joinParty(this, partyId, false);
+        }
+
+        sendPacket(PacketCreator.serverNotice(5, "You couldn't join the party due to an expired invitation request."));
+        return false;
     }
 
     public boolean leaveParty() {
@@ -10192,6 +10215,14 @@ public class Character extends AbstractCharacterObject {
 
     public boolean isLoggedin() {
         return loggedIn;
+    }
+
+    /**
+     * Marks a character as online without going through a login. Needed for characters on a socketless client
+     * (see Client.createSocketless()), which never run the normal login path.
+     */
+    public void setLoggedIn(boolean loggedIn) {
+        this.loggedIn = loggedIn;
     }
 
     public void setMapId(int mapid) {

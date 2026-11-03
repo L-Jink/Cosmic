@@ -116,6 +116,7 @@ public class Client extends ChannelInboundHandlerAdapter {
     private volatile boolean inTransition;
 
     private io.netty.channel.Channel ioChannel;
+    private boolean socketless = false;
     private Character player;
     private int channel = 1;
     private int accId = -4;
@@ -172,6 +173,20 @@ public class Client extends ChannelInboundHandlerAdapter {
     public static Client createChannelClient(long sessionId, String remoteAddress, PacketProcessor packetProcessor,
                                              int world, int channel) {
         return new Client(Type.CHANNEL, sessionId, remoteAddress, packetProcessor, world, channel);
+    }
+
+    /**
+     * A channel client with no network session: packets sent to it are dropped. Used by server-side
+     * simulated players; it never touches the login state (accounts table) on disconnect.
+     */
+    public static Client createSocketless(long sessionId, int world, int channel) {
+        Client c = new Client(Type.CHANNEL, sessionId, "socketless", null, world, channel);
+        c.socketless = true;
+        return c;
+    }
+
+    public boolean isSocketless() {
+        return socketless;
     }
 
     public static Client createMock() {
@@ -282,10 +297,16 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void closeSession() {
+        if (ioChannel == null) {
+            return;
+        }
         ioChannel.close();
     }
 
     public void disconnectSession() {
+        if (ioChannel == null) {
+            return;
+        }
         ioChannel.disconnect();
     }
 
@@ -1061,6 +1082,12 @@ public class Client extends ChannelInboundHandlerAdapter {
             }
         }
 
+        if (socketless) {
+            // no account/session/login-state to release
+            engines = null;
+            return;
+        }
+
         SessionCoordinator.getInstance().closeSession(this, false);
 
         if (!serverTransition && isLoggedIn()) {
@@ -1162,6 +1189,9 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void checkIfIdle(final IdleStateEvent event) {
+        if (ioChannel == null) {
+            return;
+        }
         final long pingedAt = System.currentTimeMillis();
         sendPacket(PacketCreator.getPing());
         TimerManager.getInstance().schedule(() -> {
@@ -1463,9 +1493,13 @@ public class Client extends ChannelInboundHandlerAdapter {
     }
 
     public void sendPacket(Packet packet) {
+        final io.netty.channel.Channel io = ioChannel;
+        if (io == null) {
+            return; // socketless client: drop silently
+        }
         announcerLock.lock();
         try {
-            ioChannel.writeAndFlush(packet);
+            io.writeAndFlush(packet);
         } finally {
             announcerLock.unlock();
         }

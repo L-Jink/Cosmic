@@ -97,6 +97,9 @@ public final class PartyOperationHandler extends AbstractPacketHandler {
                         if (party.getMembers().size() < 6) {
                             if (InviteCoordinator.createInvite(InviteType.PARTY, player, party.getId(), invited.getId())) {
                                 invited.sendPacket(PacketCreator.partyInvite(player));
+                                if (invited.getClient().isSocketless()) {
+                                    sim.SimManager.getInstance().onPartyInvite(invited.getId(), party.getId()); // simulated player answers
+                                }
                             } else {
                                 c.sendPacket(PacketCreator.partyStatusMessage(22, invited.getName()));
                             }

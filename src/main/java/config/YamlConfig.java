@@ -24,6 +24,7 @@ public class YamlConfig {
     public static final YamlConfig config = loadConfig();
 
     public List<WorldConfig> worlds;
+    public EventCalendarConfig event_calendar;
     public ServerConfig server;
 
     private static YamlConfig loadConfig() {

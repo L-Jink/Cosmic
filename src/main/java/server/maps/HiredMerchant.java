@@ -239,6 +239,11 @@ public class HiredMerchant extends AbstractMapObject {
 
     public void takeItemBack(int slot, Character chr) {
         synchronized (items) {
+            if (slot < 0 || slot >= items.size()) {
+                chr.sendPacket(PacketCreator.enableActions());
+                return;
+            }
+
             PlayerShopItem shopItem = items.get(slot);
             if (shopItem.isExist()) {
                 if (shopItem.getBundles() > 0) {
@@ -282,13 +287,32 @@ public class HiredMerchant extends AbstractMapObject {
         }
     }
 
+    /**
+     * Total price of {@code quantity} bundles, or -1 if it does not fit in a meso amount.
+     * Computed with integer math: the former float math silently under-charged large prices.
+     */
+    static long totalPrice(int unitPrice, int quantity) {
+        long total = (long) unitPrice * quantity;
+        return total > Integer.MAX_VALUE ? -1 : total;
+    }
+
+    static boolean canHoldMerchantMesos(int current, int add) {
+        return (long) current + add <= Integer.MAX_VALUE;
+    }
+
     public void buy(Client c, int item, short quantity) {
         synchronized (items) {
+            // Closed (or being closed) shops must not sell: closeShop() returns the remaining stock to the owner.
+            if (!isOpen() || item < 0 || item >= items.size() || quantity < 1) {
+                c.sendPacket(PacketCreator.enableActions());
+                return;
+            }
+
             PlayerShopItem pItem = items.get(item);
             Item newItem = pItem.getItem().copy();
 
             newItem.setQuantity((short) ((pItem.getItem().getQuantity() * quantity)));
-            if (quantity < 1 || !pItem.isExist() || pItem.getBundles() < quantity) {
+            if (!pItem.isExist() || pItem.getBundles() < quantity) {
                 c.sendPacket(PacketCreator.enableActions());
                 return;
             } else if (newItem.getInventoryType().equals(InventoryType.EQUIP) && newItem.getQuantity() > 1) {
@@ -298,8 +322,21 @@ public class HiredMerchant extends AbstractMapObject {
 
             KarmaManipulator.toggleKarmaFlagToUntradeable(newItem);
 
-            int price = (int) Math.min((float) pItem.getPrice() * quantity, Integer.MAX_VALUE);
+            long total = totalPrice(pItem.getPrice(), quantity);
+            if (total < 0) {
+                c.sendPacket(PacketCreator.enableActions());
+                return;
+            }
+
+            int price = (int) total;
             if (c.getPlayer().getMeso() >= price) {
+                Character onlineOwner = Server.getInstance().getWorld(world).getPlayerStorage().getCharacterByName(ownerName);
+                if (onlineOwner != null && !canHoldMerchantMesos(onlineOwner.getMerchantMeso(), price - Trade.getFee(price))) {
+                    c.getPlayer().dropMessage(1, "Transaction failed since the shop owner can't hold any more mesos.");
+                    c.sendPacket(PacketCreator.enableActions());
+                    return;
+                }
+
                 if (canBuy(c, newItem)) {
                     c.getPlayer().gainMeso(-price, false);
                     price -= Trade.getFee(price);  // thanks BHB for pointing out trade fees not applying here
@@ -423,6 +460,10 @@ public class HiredMerchant extends AbstractMapObject {
     }
 
     private void closeShop(Client c, boolean timeout) {
+        synchronized (items) {
+            setOpen(false);   // from here on buy() is rejected, so the stock handed back below cannot be sold too
+        }
+
         map.removeMapObject(this);
         map.broadcastMessage(PacketCreator.removeHiredMerchantBox(ownerId));
         c.getChannelServer().removeHiredMerchant(ownerId);
@@ -543,7 +584,7 @@ public class HiredMerchant extends AbstractMapObject {
 
     public List<PlayerShopItem> getItems() {
         synchronized (items) {
-            return Collections.unmodifiableList(items);
+            return Collections.unmodifiableList(new ArrayList<>(items));   // snapshot, callers iterate unlocked
         }
     }
 

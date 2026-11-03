@@ -14,6 +14,7 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * One headless v83 connection (login server or channel server). Protocol notes: docs/agents/testclient.md.
@@ -106,10 +107,28 @@ public final class HeadlessClient implements Closeable {
      * answered with a pong; every other packet is skipped and logged.
      */
     public PacketReader expect(SendOpcode wanted) throws IOException {
+        return expect(wanted, r -> true);
+    }
+
+    /**
+     * Like {@link #expect(SendOpcode)} but only accepts a packet when {@code filter} approves it (the filter reads
+     * from just after the opcode; the returned reader is rewound to there). Non-matching packets are skipped.
+     */
+    public PacketReader expect(SendOpcode wanted, Predicate<PacketReader> filter) throws IOException {
         while (true) {
             PacketReader p = read();
             if (p.opcode() == wanted.getValue()) {
-                return p.afterOpcode();
+                boolean ok;
+                try {
+                    ok = filter.test(p.afterOpcode());
+                } catch (RuntimeException e) {
+                    ok = false; // too short for the filter: a different packet shape with the same opcode
+                }
+                if (ok) {
+                    return p.afterOpcode();
+                }
+                log.accept("  (skipping non-matching 0x" + Integer.toHexString(p.opcode()) + ")");
+                continue;
             }
             if (p.opcode() == SendOpcode.PING.getValue()) {
                 send(RecvOpcode.PONG, w -> { });

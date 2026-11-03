@@ -73,10 +73,10 @@ public final class OwlWarpHandler extends AbstractPacketHandler {
                             c.sendPacket(PacketCreator.getOwlMessage(18));
                         }
                     } else {
-                        c.sendPacket(PacketCreator.serverNotice(1, "That shop is currently located in another channel. Current location: Channel " + hm.getChannel() + ", '" + hm.getMap().getMapName() + "'."));
+                        c.sendPacket(PacketCreator.serverNotice(1, "That shop is currently located in another channel. Current location: Channel " + ps.getChannel() + ", '" + ps.getOwner().getMap().getMapName() + "'."));
                     }
                 } else {
-                    c.sendPacket(PacketCreator.serverNotice(1, "That shop is currently located outside of the FM area. Current location: Channel " + hm.getChannel() + ", '" + hm.getMap().getMapName() + "'."));
+                    c.sendPacket(PacketCreator.serverNotice(1, "That shop is currently located outside of the FM area. Current location: Channel " + ps.getChannel() + ", '" + ps.getOwner().getMap().getMapName() + "'."));
                 }
             } else {
                 //c.sendPacket(PacketCreator.serverNotice(1, "That merchant has either been closed or is under maintenance."));
