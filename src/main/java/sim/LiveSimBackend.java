@@ -63,6 +63,15 @@ public class LiveSimBackend implements SimBackend {
     }
 
     @Override
+    public void declineStrayPartyInvite(int characterId, int partyId) {
+        net.server.coordinator.world.InviteCoordinator.InviteResult res = net.server.coordinator.world.InviteCoordinator
+                .answerInvite(net.server.coordinator.world.InviteCoordinator.InviteType.PARTY, characterId, partyId, false);
+        if (res.from != null) {
+            res.from.sendPacket(tools.PacketCreator.partyStatusMessage(23, "that player"));
+        }
+    }
+
+    @Override
     public int wipeDatabase() {
         try (Connection con = DatabaseConnection.getConnection()) {
             con.setAutoCommit(false);
@@ -219,6 +228,41 @@ public class LiveSimBackend implements SimBackend {
         @Override
         public void leave() {
             client.forceDisconnect();
+        }
+
+        @Override
+        public String name() {
+            return chr.getName();
+        }
+
+        @Override
+        public boolean isInParty() {
+            return chr.getParty() != null;
+        }
+
+        @Override
+        public boolean acceptPartyInvite(int partyId) {
+            return SimParty.accept(chr, partyId);
+        }
+
+        @Override
+        public void declinePartyInvite(int partyId) {
+            SimParty.decline(chr, partyId);
+        }
+
+        @Override
+        public boolean partySay(String text) {
+            return SimParty.say(chr, text);
+        }
+
+        @Override
+        public SimParty.InviteOutcome invite(String playerName) {
+            return SimParty.invite(chr, playerName);
+        }
+
+        @Override
+        public void leaveParty() {
+            SimParty.leave(chr);
         }
     }
 }

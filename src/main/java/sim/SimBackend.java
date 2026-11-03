@@ -20,6 +20,10 @@ public interface SimBackend {
      */
     int wipeDatabase();
 
+    /** Clears a pending party invite addressed to a sim that has no live handle (e.g. sims were switched off). */
+    default void declineStrayPartyInvite(int characterId, int partyId) {
+    }
+
     /** An online bot. */
     interface SimHandle {
         int characterId();
@@ -27,5 +31,23 @@ public interface SimBackend {
         int mapId();
 
         void leave();
+
+        String name();
+
+        boolean isInParty();
+
+        /** Joins the party the pending invite is for. @return true if the bot is now a member. */
+        boolean acceptPartyInvite(int partyId);
+
+        /** Turns a pending invite down (the inviter is told). */
+        void declinePartyInvite(int partyId);
+
+        /** Says something in party chat. @return false if the bot has no party. */
+        boolean partySay(String text);
+
+        /** Invites an online player, creating a party for the bot if needed. */
+        SimParty.InviteOutcome invite(String playerName);
+
+        void leaveParty();
     }
 }

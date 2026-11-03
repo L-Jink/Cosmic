@@ -31,6 +31,13 @@ class SimManagerTest {
                 public int characterId() { return id; }
                 public int mapId() { return bot.homeMap(); }
                 public void leave() { left.add(bot.name()); }
+                public String name() { return bot.name(); }
+                public boolean isInParty() { return false; }
+                public boolean acceptPartyInvite(int partyId) { return false; }
+                public void declinePartyInvite(int partyId) { }
+                public boolean partySay(String text) { return false; }
+                public SimParty.InviteOutcome invite(String playerName) { return SimParty.InviteOutcome.NO_SUCH_PLAYER; }
+                public void leaveParty() { }
             };
         }
 
