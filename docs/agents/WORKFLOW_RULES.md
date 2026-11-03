@@ -7,3 +7,8 @@
    but 2 failures = give up.
 4. Java and gh come from Windows PATH; restart Hermes after any install so agents inherit it.
 5. PR text follows PR_STYLE.md, and its claims must match what the tests actually assert.
+6. Testing a PR by hand: one command builds and starts the server for a PR (or any folder), prints
+   `SERVER READY - log in now`, and Ctrl+C stops it:
+   `powershell -ExecutionPolicy Bypass -File tools/agent/start_server.ps1 -Pr 7`
+   Other forms: `-Dir <folder>` (a specific worktree) or no parameters (current folder). It refuses to start
+   if port 8484 is already in use.
