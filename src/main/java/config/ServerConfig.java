@@ -299,4 +299,8 @@ public class ServerConfig {
 
     //Custom NPC overrides. List of NPC IDs.
     public Map<String, String> NPCS_SCRIPTABLE = new HashMap<>();
+
+    //Simulated players (see sim/ and docs/agents/decisions/0001-simulated-players.md)
+    public boolean SIM_PLAYERS_ENABLED = false;
+    public java.util.List<Map<String, Object>> SIM_BOTS = new java.util.ArrayList<>();
 }
