@@ -175,6 +175,19 @@ event_calendar:
   #    drop_mult: 2
   #    announce: "Weekend 2x EXP and drop event is live!"
 
+  # World notices (events + maintenance). {name} {minutes} {time} are substituted.
+  NOTICE_MINUTES: [10, 5, 1]            # "starts in N minutes" notices before each event; also maintenance countdown notices
+  NOTICE_TYPE: 6                        # serverNotice type (0 notice, 5 pink, 6 light blue)
+  MSG_EVENT_SOON: "[Event] {name} starts in {minutes} minute(s)!"
+  MSG_EVENT_START: "[Event] {name} is now live!"   # used when an event has no `announce`
+  MSG_EVENT_END: "[Event] {name} has ended. Thanks for playing!"
+  MAINTENANCE_NOTICE_SECONDS: [30, 10] # extra final-countdown notices for !shutdown <minutes>
+  MAINTENANCE_SHUTDOWN_GRACE_SECONDS: 5 # time between blocking new logins (T-0) and the clean shutdown
+  MSG_MAINT_START: "[Maintenance] The server will go down for maintenance in {time}. Please finish what you are doing and log out safely."
+  MSG_MAINT_WARN: "[Maintenance] The server will go down for maintenance in {time}."
+  MSG_MAINT_NOW: "[Maintenance] The server is going down for maintenance now. New logins are disabled."
+  MSG_MAINT_CANCEL: "[Maintenance] The scheduled maintenance has been cancelled."
+
 server:
     #Database Configuration
     DB_URL_FORMAT: "jdbc:mysql://%s:3306/cosmic" # If the docker ENV for DB_HOST is anything but "db", this string format should be changed from 3306 to 3307 (or whichever port it was changed to in docker) 

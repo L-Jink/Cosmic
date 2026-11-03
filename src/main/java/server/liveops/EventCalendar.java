@@ -269,9 +269,12 @@ public class EventCalendar {
         }
         ZoneId zone = parseZone(cfg.TIMEZONE);
         long interval = Math.max(1, cfg.CHECK_INTERVAL_SECONDS) * 1000L;
+        EventNotices notices = new EventNotices(cal.getWindows(), cfg, Maintenance::broadcast);
         server.TimerManager.getInstance().register(() -> {
             try {
-                cal.tick(ZonedDateTime.now(zone));
+                ZonedDateTime now = ZonedDateTime.now(zone);
+                notices.tick(now);
+                cal.tick(now);
             } catch (RuntimeException ex) {
                 log.warn("Event calendar tick failed", ex);
             }

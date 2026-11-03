@@ -27,57 +27,50 @@ import client.Character;
 import client.Client;
 import client.command.Command;
 import net.server.Server;
-import net.server.world.World;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import server.TimerManager;
+import server.liveops.Maintenance;
 
-import static java.util.concurrent.TimeUnit.DAYS;
-import static java.util.concurrent.TimeUnit.HOURS;
-import static java.util.concurrent.TimeUnit.MINUTES;
-import static java.util.concurrent.TimeUnit.SECONDS;
+import java.time.Duration;
 
 public class ShutdownCommand extends Command {
+    private static final Logger log = LoggerFactory.getLogger(ShutdownCommand.class);
+
     {
-        setDescription("Shut down the server.");
+        setDescription("Shut down the server (maintenance countdown with world notices).");
     }
 
     @Override
     public void execute(Client c, String[] params) {
         Character player = c.getPlayer();
         if (params.length < 1) {
-            player.yellowMessage("Syntax: !shutdown [<time>|NOW]");
+            player.yellowMessage("Syntax: !shutdown [<minutes>|NOW]");
             return;
         }
 
-        int time = 60000;
         if (params[0].equalsIgnoreCase("now")) {
-            time = 1;
-        } else {
-            time *= Integer.parseInt(params[0]);
+            log.info("{} ran !shutdown now", player.getName());
+            TimerManager.getInstance().schedule(Server.getInstance().shutdown(false), 1);
+            return;
         }
 
-        if (time > 1) {
-            int seconds = (time / (int) SECONDS.toMillis(1)) % 60;
-            int minutes = (time / (int) MINUTES.toMillis(1)) % 60;
-            int hours = (time / (int) HOURS.toMillis(1)) % 24;
-            int days = (time / (int) DAYS.toMillis(1));
-
-            String strTime = "";
-            if (days > 0) {
-                strTime += days + " days, ";
-            }
-            if (hours > 0) {
-                strTime += hours + " hours, ";
-            }
-            strTime += minutes + " minutes, ";
-            strTime += seconds + " seconds";
-
-            for (World w : Server.getInstance().getWorlds()) {
-                for (Character chr : w.getPlayerStorage().getAllCharacters()) {
-                    chr.dropMessage("Server is undergoing maintenance process, and will be shutdown in " + strTime + ". Prepare yourself to quit safely in the mean time.");
-                }
-            }
+        int minutes;
+        try {
+            minutes = Integer.parseInt(params[0]);
+        } catch (NumberFormatException e) {
+            player.yellowMessage("Syntax: !shutdown [<minutes>|NOW]");
+            return;
+        }
+        if (minutes < 1) {
+            player.yellowMessage("Minutes must be at least 1.");
+            return;
         }
 
-        TimerManager.getInstance().schedule(Server.getInstance().shutdown(false), time);
+        // Countdown flow: world notices (T-10/5/1 min, 30s, 10s), logins blocked at T-0, then clean shutdown.
+        log.info("{} started a {} minute maintenance countdown via !shutdown.", player.getName(), minutes);
+        if (!Maintenance.start(Duration.ofMinutes(minutes), player.getName())) {
+            player.yellowMessage("A maintenance countdown is already running.");
+        }
     }
 }
