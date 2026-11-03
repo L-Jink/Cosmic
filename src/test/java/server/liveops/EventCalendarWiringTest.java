@@ -36,7 +36,7 @@ class EventCalendarWiringTest {
         when(world.getDropRate()).thenReturn(10);
         when(world.getMesoRate()).thenReturn(10);
 
-        ZoneId zone = ZoneId.of("Asia/Singapore");
+        ZoneId zone = EventCalendar.hostZone(); // blank TIMEZONE = the PC's own zone, whatever that is
         ZonedDateTime[] fake = {ZonedDateTime.of(2026, 11, 3, 21, 44, 59, 0, zone)};
         TimerManager.getInstance().start();
         EventCalendar cal = EventCalendar.start(cfg, () -> List.of(world), z -> fake[0].withZoneSameInstant(z));

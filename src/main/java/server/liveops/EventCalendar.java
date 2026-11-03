@@ -57,15 +57,33 @@ public class EventCalendar {
         return new EventCalendar(parsed, worlds);
     }
 
+    private static volatile ZoneId hostZone;
+
+    /**
+     * Remembers the host PC's own zone. Server.init later forces the JVM default to server.TIMEZONE (GMT), after which
+     * ZoneId.systemDefault() no longer reflects the machine clock, so this must be called before that happens.
+     */
+    public static void captureHostZone() {
+        if (hostZone == null) {
+            hostZone = ZoneId.systemDefault();
+        }
+    }
+
+    /** The PC's own time zone (as captured at startup, else the current JVM default). */
+    public static ZoneId hostZone() {
+        ZoneId z = hostZone;
+        return z != null ? z : ZoneId.systemDefault();
+    }
+
     public static ZoneId parseZone(String tz) {
         if (tz == null || tz.isBlank()) {
-            return ZoneId.systemDefault();
+            return hostZone();
         }
         try {
             return ZoneId.of(tz.trim());
         } catch (DateTimeException e) {
-            log.warn("Event calendar: unknown TIMEZONE '{}', using server zone.", tz);
-            return ZoneId.systemDefault();
+            log.warn("Event calendar: unknown TIMEZONE '{}', using the PC zone {}.", tz, hostZone());
+            return hostZone();
         }
     }
 
@@ -276,7 +294,7 @@ public class EventCalendar {
         ZoneId zone = parseZone(cfg.TIMEZONE);
         long interval = Math.max(1, cfg.CHECK_INTERVAL_SECONDS) * 1000L;
         java.util.function.Function<ZoneId, ZonedDateTime> now = clock != null ? clock : ZonedDateTime::now;
-        log.info("Event calendar: zone={} (now {} there; blank TIMEZONE = server.TIMEZONE), check every {}s, windows={}",
+        log.info("Event calendar: zone={} (now {} there; blank TIMEZONE = this PC's zone), check every {}s, windows={}",
                 zone, now.apply(zone).toLocalTime().withNano(0), interval / 1000, cal.getWindows());
         server.TimerManager.getInstance().register(() -> {
             try {

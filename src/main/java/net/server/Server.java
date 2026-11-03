@@ -883,6 +883,7 @@ public class Server {
         futures.add(initExecutor.submit(SkillbookInformationProvider::loadAllSkillbookInformation));
         initExecutor.shutdown();
 
+        server.liveops.EventCalendar.captureHostZone(); // must run before the JVM default zone is overridden below
         TimeZone.setDefault(TimeZone.getTimeZone(YamlConfig.config.server.TIMEZONE));
 
         final int worldCount = Math.min(GameConstants.WORLD_NAMES.length, YamlConfig.config.server.WORLDS);
